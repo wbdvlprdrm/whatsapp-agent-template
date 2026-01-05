@@ -11,6 +11,7 @@ router = APIRouter()
 # Singletons (MVP)
 dedupe = InMemoryDedupe()
 wa = WhatsAppService()
+await wa.send_text(...)
 agent = SalesAgent()
 
 
