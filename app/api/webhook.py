@@ -1,7 +1,18 @@
 from fastapi import APIRouter, Request
+
 from app.config.settings import VERIFY_TOKEN
+from app.api.wa_parser import extract_incoming_text_messages
+from app.services.dedupe import InMemoryDedupe
+from app.services.whatsapp import WhatsAppService
+from app.agents.sales_agent import SalesAgent
 
 router = APIRouter()
+
+# Singletons (MVP)
+dedupe = InMemoryDedupe()
+wa = WhatsAppService()
+agent = SalesAgent()
+
 
 @router.get("/webhook")
 async def verify_webhook(request: Request):
@@ -17,39 +28,32 @@ async def verify_webhook(request: Request):
 
 @router.post("/webhook")
 async def receive_message(request: Request):
+    # raw body for future signature verification (we'll add in next step)
     try:
         payload = await request.json()
     except Exception:
         print("⚠️ Webhook recibido sin JSON")
         return {"status": "ignored"}
 
-    entry = payload.get("entry", [])
-    if not entry:
-        print("⚠️ Payload sin entry")
-        return {"status": "ignored"}
+    messages = extract_incoming_text_messages(payload)
 
-    changes = entry[0].get("changes", [])
-    if not changes:
-        print("⚠️ Entry sin changes")
-        return {"status": "ignored"}
-
-    value = changes[0].get("value", {})
-
-    messages = value.get("messages")
     if not messages:
         # Esto incluye statuses, delivered, read, etc.
-        print("ℹ️ Evento sin mensaje (status u otro)")
+        print("ℹ️ Evento sin mensaje de texto (status u otro)")
         return {"status": "ignored"}
 
-    message = messages[0]
-    from_number = message.get("from")
+    processed = 0
 
-    text = message.get("text", {}).get("body")
-    if not text:
-        print(f"⚠️ Mensaje sin texto desde {from_number}")
-        return {"status": "ignored"}
+    for from_number, text, message_id in messages:
+        # dedupe to avoid double replies
+        if dedupe.seen(message_id):
+            continue
 
-    print(f"📩 Mensaje de {from_number}: {text}")
+        print(f"📩 Mensaje de {from_number}: {text}")
 
-    # 👉 Aquí luego llamaremos al sales_agent
-    return {"status": "received"}
+        reply = agent.handle_message(text)
+        await wa.send_text(to=from_number, text=reply)
+
+        processed += 1
+
+    return {"status": "received", "processed": processed}
