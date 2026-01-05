@@ -11,11 +11,22 @@ def get_env(name: str, required: bool = True, default=None):
     return value
 
 # =========================
-# WhatsApp
+# WhatsApp / Meta
 # =========================
 WHATSAPP_TOKEN = get_env("WHATSAPP_TOKEN", required=False)
 WHATSAPP_PHONE_ID = get_env("WHATSAPP_PHONE_ID", required=False)
+
 VERIFY_TOKEN = get_env("VERIFY_TOKEN", required=False)
+
+# Cloud API base (versioned)
+WHATSAPP_API_BASE = get_env(
+    "WHATSAPP_API_BASE",
+    required=False,
+    default="https://graph.facebook.com/v19.0",
+)
+
+# Used to verify webhook signature (X-Hub-Signature-256) in production
+META_APP_SECRET = get_env("META_APP_SECRET", required=False)
 
 # =========================
 # LLM
