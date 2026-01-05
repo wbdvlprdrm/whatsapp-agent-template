@@ -28,7 +28,18 @@ async def verify_webhook(request: Request):
 
 @router.post("/webhook")
 async def receive_message(request: Request):
-    # raw body for future signature verification (we'll add in next step)
+    raw = await request.body()
+
+    # En producción exigimos firma válida
+    # (en dev seguimos sin bloquear)
+    from app.config.settings import APP_ENV
+    from app.api.meta_signature import verify_meta_signature
+
+    if APP_ENV == "production":
+        if not verify_meta_signature(request, raw):
+            print("⛔ Firma inválida: webhook rechazado")
+            return {"status": "rejected"}
+
     try:
         payload = await request.json()
     except Exception:
@@ -38,14 +49,12 @@ async def receive_message(request: Request):
     messages = extract_incoming_text_messages(payload)
 
     if not messages:
-        # Esto incluye statuses, delivered, read, etc.
         print("ℹ️ Evento sin mensaje de texto (status u otro)")
         return {"status": "ignored"}
 
     processed = 0
 
     for from_number, text, message_id in messages:
-        # dedupe to avoid double replies
         if dedupe.seen(message_id):
             continue
 
